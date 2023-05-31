@@ -2,8 +2,40 @@ import os
 import pandas as pd
 import requests
 import tkinter as tk
-from tkinter import messagebox, filedialog
-from threading import Thread
+from tkinter import messagebox
+
+
+def validate_columns(planilha):
+    required_columns = {"CEP", "Endereço", "Bairro", "Cidade", "Estado"}
+    return set(planilha.columns) == required_columns
+
+
+def validate_ceps(planilha):
+    return "CEP" in planilha.columns and not planilha["CEP"].isnull().all()
+
+
+def consultar_cep(cep):
+    try:
+        url = f'https://viacep.com.br/ws/{cep}/json/'
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Ocorreu um erro na consulta do CEP {cep}: {e}")
+        return None
+
+
+def open_file():
+    file_path = os.path.join(os.getcwd(), "CEPS.xlsx")
+    if os.path.exists(file_path):
+        try:
+            os.startfile(file_path)
+        except Exception:
+            messagebox.showerror("Erro", "Não foi possível abrir a planilha.")
+    else:
+        messagebox.showerror("Erro", "Arquivo da planilha não encontrado.")
 
 
 class Application(tk.Tk):
@@ -22,11 +54,13 @@ class Application(tk.Tk):
         self.button_frame = tk.Frame(self, bg="#F2F2F2")  # Widget de preenchimento para centralizar os botões
         self.button_frame.pack()
 
-        self.button_validate = tk.Button(self.button_frame, text="Validar", font=("Helvetica", 12), command=self.validate_file, bg="#008CBA", fg="white")
+        self.button_validate = tk.Button(self.button_frame, text="Validar", font=("Helvetica", 12),
+                                         command=self.validate_file, bg="#008CBA", fg="white")
         self.button_validate.pack(side=tk.LEFT, padx=10, pady=10)
         self.button_validate.configure(width=12)  # Definir largura do botão
 
-        self.button_open = tk.Button(self.button_frame, text="Abrir Planilha", font=("Helvetica", 12), command=self.open_file, bg="#008CBA", fg="white")
+        self.button_open = tk.Button(self.button_frame, text="Abrir Planilha", font=("Helvetica", 12),
+                                     command=open_file, bg="#008CBA", fg="white")
         self.button_open.pack(side=tk.LEFT, padx=10, pady=10)
         self.button_open.configure(width=12)  # Definir largura do botão
 
@@ -55,8 +89,8 @@ class Application(tk.Tk):
         if os.path.exists(file_path):
             try:
                 planilha = pd.read_excel(file_path, dtype={'CEP': str})
-                if self.validate_columns(planilha):
-                    if self.validate_ceps(planilha):
+                if validate_columns(planilha):
+                    if validate_ceps(planilha):
                         cep_count = len(planilha)
                         message = f"A planilha contém {cep_count} CEP(s). Deseja iniciar a pesquisa?"
                         if messagebox.askyesno("Validação Concluída", message):
@@ -74,28 +108,9 @@ class Application(tk.Tk):
         else:
             messagebox.showerror("Erro", "Arquivo da planilha não encontrado.")
 
-    def validate_columns(self, planilha):
-        required_columns = {"CEP", "Endereço", "Bairro", "Cidade", "Estado"}
-        return set(planilha.columns) == required_columns
-
-    def validate_ceps(self, planilha):
-        return "CEP" in planilha.columns and not planilha["CEP"].isnull().all()
-
     def update_progress(self):
         self.progress_label.configure(text="Preenchendo dados...")
         self.button_validate.configure(state="disabled")
-
-    def consultar_cep(self, cep):
-        try:
-            url = f'https://viacep.com.br/ws/{cep}/json/'
-            response = requests.get(url)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return None
-        except requests.exceptions.RequestException as e:
-            print(f"Ocorreu um erro na consulta do CEP {cep}: {e}")
-            return None
 
     def preencher_dados_api_na_planilha(self, planilha):
         try:
@@ -103,7 +118,7 @@ class Application(tk.Tk):
                 cep = row['CEP']
 
                 if len(str(cep)) == 8 and str(cep).isdigit():
-                    resultado = self.consultar_cep(cep)
+                    resultado = consultar_cep(cep)
 
                     if resultado is not None:
                         planilha.at[index, 'Endereço'] = resultado.get('logradouro', '')
@@ -123,16 +138,6 @@ class Application(tk.Tk):
             self.progress_label.configure(text="Preenchimento de dados concluído.")
         except Exception as e:
             messagebox.showerror("Erro", f"Ocorreu um erro durante o preenchimento dos dados: {e}")
-
-    def open_file(self):
-        file_path = os.path.join(os.getcwd(), "CEPS.xlsx")
-        if os.path.exists(file_path):
-            try:
-                os.startfile(file_path)
-            except Exception:
-                messagebox.showerror("Erro", "Não foi possível abrir a planilha.")
-        else:
-            messagebox.showerror("Erro", "Arquivo da planilha não encontrado.")
 
 
 if __name__ == "__main__":
